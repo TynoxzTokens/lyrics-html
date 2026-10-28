@@ -1,0 +1,349 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Floating Lyrics</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #05060D;
+    font-family: Helvetica, Arial, sans-serif;
+}
+
+#screen {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #05060D;
+}
+
+.lyric {
+    position: absolute;
+    width: min(300px, calc(100vw - 24px));
+    height: 250px;
+    background: #8A0000;
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 15px;
+    font-size: 22px;
+    font-weight: bold;
+    overflow-wrap: break-word;
+    z-index: 2;
+    will-change: transform;
+}
+
+.note {
+    position: absolute;
+    font-weight: bold;
+    pointer-events: none;
+    z-index: 1;
+    will-change: transform;
+    user-select: none;
+}
+
+#startScreen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    z-index: 10;
+    background: #05060D;
+    color: white;
+    text-align: center;
+    padding: 20px;
+}
+
+#startScreen h2 {
+    color: #ff3333;
+}
+
+button {
+    border: none;
+    border-radius: 10px;
+    background: #8A0000;
+    color: white;
+    padding: 13px 28px;
+    font-size: 16px;
+    font-weight: bold;
+}
+</style>
+</head>
+
+<body>
+<div id="screen">
+
+    <div id="startScreen">
+        <h2>♪ Floating Lyrics ♫</h2>
+        <p>Animasi lirik dengan efek melayang</p>
+        <button id="startBtn">MULAI ANIMASI</button>
+    </div>
+
+</div>
+
+<script>
+const LYRICS = [
+    [0,  "I want one ticket out of your heavy gaze"],
+    [4,  "I want one ticket off of your carousel"],
+    [9,  "But you should know that I die slow"],
+    [13, "Running through the halls of your haunted home"],
+    [18, "And the toughest part is that we both know"],
+    [22, "What happened to you"],
+    [24, "Why you're out on your own"],
+    [26, "Merry Christmas, please don't call"],
+    [31, "Merry Christmas, I'm not yours at all"],
+    [36, "Merry Christmas, please don't call me"],
+    [41, "Please don't call me"],
+    [45, "Please don't call me"],
+    [49, "Please don't call me"]
+];
+
+const BG_COLOR = "#05060D";
+const BOX_H = 250;
+const RISE_SPEED = 67;
+const BOTTOM_OFFSET = 150;
+
+const NOTE_CHARS = ["♪", "♫", "♬", "♩"];
+const NOTE_SIZES = [16, 22, 28, 34];
+const NOTE_COLORS = [
+    "#8A0000", "#A30000",
+    "#B30000", "#C40000"
+];
+
+const screen = document.getElementById("screen");
+const startScreen = document.getElementById("startScreen");
+const startBtn = document.getElementById("startBtn");
+
+let boxes = [];
+let notes = [];
+let nextLyric = 0;
+let currentSide = "left";
+let startTime = 0;
+let lastFrame = 0;
+let nextNoteTime = 0;
+let animationId = null;
+let running = false;
+
+function random(min, max) {
+    return Math.random() * (max - min) + min;
+}
+
+function getBoxWidth() {
+    return Math.min(300, window.innerWidth - 24);
+}
+
+function getX() {
+    const w = getBoxWidth();
+    const center = window.innerWidth / 2;
+    const leftX = Math.max(12, center - w - 20);
+    const rightX = Math.min(
+        window.innerWidth - w - 12,
+        center + 20
+    );
+
+    if (currentSide === "left") {
+        currentSide = "right";
+        return leftX;
+    } else {
+        currentSide = "left";
+        return rightX;
+    }
+}
+
+function createLyric(text) {
+    const el = document.createElement("div");
+    el.className = "lyric";
+    el.textContent = "";
+
+    const x = getX();
+    const y = window.innerHeight - BOX_H - BOTTOM_OFFSET;
+
+    el.style.left = x + "px";
+    screen.appendChild(el);
+
+    const box = {
+        el,
+        text,
+        x,
+        y,
+        typed: 0,
+        lastType: performance.now()
+    };
+
+    boxes.push(box);
+}
+
+function createNote() {
+    const el = document.createElement("div");
+    el.className = "note";
+    el.textContent =
+        NOTE_CHARS[Math.floor(Math.random() * NOTE_CHARS.length)];
+
+    const size =
+        NOTE_SIZES[Math.floor(Math.random() * NOTE_SIZES.length)];
+
+    const color =
+        NOTE_COLORS[Math.floor(Math.random() * NOTE_COLORS.length)];
+
+    el.style.fontSize = size + "px";
+    el.style.color = color;
+
+    const note = {
+        el,
+        x: random(10, Math.max(10, innerWidth - 30)),
+        y: innerHeight + random(0, 120),
+        speed: random(35, 95),
+        amp: random(12, 45),
+        freq: random(0.8, 2.4),
+        phase: random(0, Math.PI * 2),
+        born: performance.now()
+    };
+
+    screen.appendChild(el);
+    notes.push(note);
+}
+
+function updateLyrics(dt, now) {
+    const elapsed = (now - startTime) / 1000;
+
+    while (
+        nextLyric < LYRICS.length &&
+        LYRICS[nextLyric][0] <= elapsed
+    ) {
+        createLyric(LYRICS[nextLyric][1]);
+        nextLyric++;
+    }
+
+    boxes = boxes.filter(box => {
+        box.y -= RISE_SPEED * dt;
+
+        if (now - box.lastType >= 100) {
+            if (box.typed <= box.text.length) {
+                box.el.textContent =
+                    box.text.slice(0, box.typed);
+                box.typed++;
+                box.lastType = now;
+            }
+        }
+
+        box.el.style.transform =
+            `translateY(${box.y}px)`;
+
+        if (box.y + BOX_H < -50) {
+            box.el.remove();
+            return false;
+        }
+
+        return true;
+    });
+}
+
+function updateNotes(dt, now) {
+    const elapsed = (now - startTime) / 1000;
+    const lastLyricTime = LYRICS.length
+        ? LYRICS[LYRICS.length - 1][0]
+        : 0;
+
+    if (elapsed <= lastLyricTime + 8 && now >= nextNoteTime) {
+        createNote();
+        nextNoteTime = now + random(350, 900);
+    }
+
+    notes = notes.filter(note => {
+        note.y -= note.speed * dt;
+
+        const t = (now - note.born) / 1000;
+        const x = note.x +
+            Math.sin(t * note.freq + note.phase) * note.amp;
+
+        note.el.style.transform =
+            `translate(${x}px, ${note.y}px)`;
+
+        if (note.y < -60) {
+            note.el.remove();
+            return false;
+        }
+
+        return true;
+    });
+}
+
+function tick(now) {
+    if (!running) return;
+
+    const dt = Math.min((now - lastFrame) / 1000, 0.05);
+    lastFrame = now;
+
+    updateLyrics(dt, now);
+    updateNotes(dt, now);
+
+    if (
+        nextLyric < LYRICS.length ||
+        boxes.length > 0 ||
+        notes.length > 0
+    ) {
+        animationId = requestAnimationFrame(tick);
+    } else {
+        running = false;
+    }
+}
+
+function startAnimation() {
+    if (running) return;
+
+    if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+    }
+
+    boxes.forEach(box => box.el.remove());
+    notes.forEach(note => note.el.remove());
+
+    boxes = [];
+    notes = [];
+    nextLyric = 0;
+    currentSide = "left";
+
+    startScreen.style.display = "none";
+
+    const now = performance.now();
+    startTime = now;
+    lastFrame = now;
+    nextNoteTime = now;
+    running = true;
+
+    animationId = requestAnimationFrame(tick);
+}
+
+startBtn.addEventListener("click", startAnimation);
+
+window.addEventListener("resize", () => {
+    const w = getBoxWidth();
+
+    boxes.forEach(box => {
+        box.x = Math.max(
+            12,
+            Math.min(box.x, window.innerWidth - w - 12)
+        );
+        box.el.style.width = w + "px";
+        box.el.style.left = box.x + "px";
+    });
+});
+</script>
+</body>
+</html>
